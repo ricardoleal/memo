@@ -1,0 +1,11 @@
+Vagrant - Virtualbox setup
+
+- Hosts 
+    - nfs.ipademo.local
+    - server.ipademo.local
+    - client.ipademo.local
+    - replica.ipademo.local
+
+- Passwords:
+    Directory Manager password: SecretDM01
+    IPA admin password: Secret01

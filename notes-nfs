@@ -1,0 +1,125 @@
+# Tasks at server.ipademo.local
+# --
+	Nfs server : nfs.ipademo.local
+		Exported dir: /exports/home
+
+	Client : client.ipademo.local
+
+	# Add the NFS service principal for the server and client to Kerberos
+	# --
+
+		[root@server ~]# ipa service-add nfs/nfs.ipademo.local
+			---------------------------------------------------
+			Added service "nfs/nfs.ipademo.local@IPADEMO.LOCAL"
+			---------------------------------------------------
+			Principal name: nfs/nfs.ipademo.local@IPADEMO.LOCAL
+			Principal alias: nfs/nfs.ipademo.local@IPADEMO.LOCAL
+			Managed by: nfs.ipademo.local
+
+		[root@server ~]# ipa service-add nfs/client.ipademo.local
+			------------------------------------------------------
+			Added service "nfs/client.ipademo.local@IPADEMO.LOCAL"
+			------------------------------------------------------
+			Principal name: nfs/client.ipademo.local@IPADEMO.LOCAL
+			Principal alias: nfs/client.ipademo.local@IPADEMO.LOCAL
+			Managed by: client.ipademo.local
+
+	# Add the auto.home map
+	# --
+		[root@server ~]# ipa automountmap-add default auto.home
+			-------------------------------
+			Added automount map "auto.home"
+			-------------------------------
+			Map: auto.home
+
+	# Add the auto.home map to auto.master
+	# --
+
+		[root@server ~]# ipa automountkey-add default --key "/home" --info auto.home auto.master
+			---------------------------
+			Added automount key "/home"
+			---------------------------
+			Key: /home
+			Mount information: auto.home
+
+	# Add the key to the auto.home map
+	# --
+
+		[root@server ~]# ipa automountkey-add default --key "*" --info "-fstype=nfs4,rw,sec=krb5,soft,rsize=8192,wsize=8192 nfs.ipademo.local:/exports/home/&" auto.home
+			-----------------------
+			Added automount key "*"
+			-----------------------
+			Key: *
+			Mount information: -fstype=nfs4,rw,sec=krb5,soft,rsize=8192,wsize=8192 nfs.ipademo.local:/exports/home/&
+
+# Tasks at nfs.ipademo.local
+# --
+
+	# Configure NFS server
+	# --
+		[root@nfs ~]# kinit admin
+		[root@nfs ~]# ipa-getkeytab -s server.ipademo.local -p nfs/nfs.ipademo.local -k /etc/krb5.keytab
+			Keytab successfully retrieved and stored in: /etc/krb5.keytab
+
+	# Configure NFS Server to user NFSv4
+	# --
+		[root@nfs ~]# perl -npe 's/#SECURE_NFS="yes"/SECURE_NFS="yes"/g' -i /etc/sysconfig/nfs
+
+	# Create your NFS share and start the NFS server
+	# --
+		[root@nfs ~]# mkdir -p /exports/home
+		[root@nfs ~]# echo "/exports/home  *(rw,sec=sys:krb5:krb5i:krb5p)" >> /etc/exports
+		[root@nfs ~]# systemctl start nfs
+		[root@nfs ~]# systemctl status nfs
+			● nfs-server.service - NFS server and services
+			Loaded: loaded (/usr/lib/systemd/system/nfs-server.service; disabled; vendor preset: disabled)
+			Active: active (exited) since Thu 2020-11-05 12:17:47 UTC; 4s ago
+			Process: 4562 ExecStart=/bin/sh -c if systemctl -q is-active gssproxy; then systemctl restart gssproxy ; fi >
+			Process: 4549 ExecStart=/usr/sbin/rpc.nfsd $RPCNFSDARGS (code=exited, status=0/SUCCESS)
+			Process: 4548 ExecStartPre=/usr/sbin/exportfs -r (code=exited, status=0/SUCCESS)
+			Main PID: 4562 (code=exited, status=0/SUCCESS)
+			Nov 05 12:17:47 nfs.ipademo.local systemd[1]: Starting NFS server and services...
+			Nov 05 12:17:47 nfs.ipademo.local systemd[1]: Started NFS server and services.
+		[root@nfs ~]# systemctl enable nfs 
+			Created symlink /etc/systemd/system/multi-user.target.wants/nfs-server.service → /usr/lib/systemd/system/nfs-server.service.
+
+# Creating home directories at nfs.ipademo.local
+# --
+	[root@nfs ~] mkdir user1
+	[root@nfs ~] chown -R user1 user1
+
+# Tasks at client.ipademo.local
+# --
+	# Get Kerberos Keytab
+	# --
+	[root@client ~]# ipa-getkeytab -s server.ipademo.local -p nfs/client.ipademo.local -k /etc/krb5.keytab
+		Keytab successfully retrieved and stored in: /etc/krb5.keytab
+	
+	## Set automount client as default
+	# --
+	[root@(HOST) ~]# ipa-client-automount --location=default 
+		Searching for IPA server...
+		IPA server: DNS discovery
+		Location: default
+		Continue to configure the system with these values? [no]: yes
+		Configured /etc/sysconfig/nfs
+		Configured /etc/idmapd.conf
+		Started rpcidmapd
+		Started rpcgssd
+		Restarting sssd, waiting for it to become available.
+		Started autofs
+	
+# Read Docs
+# -- 
+	# --
+	 - http://www.goralski.fr/blog/IT/FreeIPA/
+
+# Problems
+# --
+	- .bash_* locked if using in 2 hosts at same time.
+
+# Hacks
+# --
+	- ADD '--timeout=10' via WEB UI
+		- Network Services
+			- Automount Locationsdefault > auto.home
