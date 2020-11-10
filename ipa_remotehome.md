@@ -3,5 +3,3 @@
 
 
 > \# ipa-client-automount --location=default 
-
-ByTalk:
